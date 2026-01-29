@@ -16,26 +16,27 @@ jobs:
       - name: Calculate Ranking
         id: ranking
         run: |
-          # 1. 조직 ID 설정
           ORG_NAME="dangerous-office-workers"
           SINCE_DATE="${{ steps.date.outputs.since }}"
-          echo "[INFO] Searching records for $ORG_NAME since $SINCE_DATE..."
+          echo "[INFO] $ORG_NAME 의 $SINCE_DATE 이후 기록을 찾습니다..."
 
-          # 2. 커밋 데이터 가져오기 (공백/특수문자 에러 방지를 위해 -f 사용)
-          QUERY="org:$ORG_NAME author-date:>=$SINCE_DATE merge:false"
-          AUTHORS=$(gh api "search/commits" -f q="$QUERY" --jq '.items[].author.login' || echo "")
+          # 1. gh search 명령어로 커밋 작성자 아이디만 정확히 추출 (에러 발생 시 빈값 처리)
+          # jq 필터를 강화하여 오직 영문/숫자 아이디만 뽑아오도록 설정
+          AUTHORS=$(gh search commits --owner "$ORG_NAME" --author-date ">=$SINCE_DATE" --limit 100 --json author --jq '.[].author.login' 2>/dev/null || echo "")
 
-          # 3. 슬랙에 보낼 메시지 구성 (Heredoc 오타 수정)
+          # 2. 결과 메시지 작성 시작
           {
             echo "content<<EOF"
             echo "📢 *[위험한 직장인들] 이번 주 스터디 랭킹 정리*"
             echo ""
-            if [ -z "$AUTHORS" ]; then
+            
+            # AUTHORS가 비어있거나 에러 메시지가 섞인 경우 방지
+            if [ -z "$AUTHORS" ] || [[ "$AUTHORS" == *"message"* ]]; then
               echo "지난주에는 활동한 멤버가 없네요. 모두 분발하세요! ❄️"
             else
               echo "지난 일주일간의 명예의 전당입니다! 🏆"
-              # 랭킹 계산
-              echo "$AUTHORS" | sort | uniq -c | sort -rn | awk '
+              # 랭킹 계산 (실제 아이디가 있는 경우만 처리)
+              echo "$AUTHORS" | grep -v "null" | sort | uniq -c | sort -rn | awk '
                 BEGIN { rank=1 }
                 {
                   emoji = (rank == 1 ? "🥇" : (rank == 2 ? "🥈" : (rank == 3 ? "🥉" : "•")))
@@ -53,7 +54,6 @@ jobs:
       - name: Send to Slack
         uses: slackapi/slack-github-action@v1.25.0
         with:
-          # toJSON을 사용하여 특수문자/줄바꿈으로 인한 JSON 깨짐 방지
           payload: |
             {
               "text": ${{ toJSON(steps.ranking.outputs.content) }}
