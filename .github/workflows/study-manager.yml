@@ -16,35 +16,34 @@ jobs:
       - name: Calculate Ranking
         id: ranking
         run: |
-          ORG_NAME="dangerous-office-workers" # 실제 조직 ID
+          ORG_NAME="dangerous-office-workers"
           SINCE_DATE="${{ steps.date.outputs.since }}"
 
-          echo "[INFO] $ORG_NAME 조직의 $SINCE_DATE 이후 기록을 찾습니다..."
+          echo "[INFO] $ORG_NAME 의 $SINCE_DATE 이후 기록을 찾습니다..."
           
-          # 1. 커밋 데이터 가져오기 (작성자 ID만 추출)
+          # 1. gh api 호출 방식 변경
           QUERY="org:$ORG_NAME author-date:>=$SINCE_DATE merge:false"
-          AUTHORS=$(gh api "search/commits?q=$QUERY" --jq '.items[].author.login')
+          AUTHORS=$(gh api "search/commits" -f q="$QUERY" --jq '.items[].author.login' || echo "")
 
+          # 2. GITHUB_OUTPUT 멀티라인 작성법 수정
           echo "content<<EOF" >> $GITHUB_OUTPUT
-
+          
           if [ -z "$AUTHORS" ]; then
-            echo "content=지난주에는 활동한 멤버가 없네요. 모두 분발하세요! ❄️" >> $GITHUB_OUTPUT
+            echo "지난주에는 활동한 멤버가 없네요. 모두 더 위험해지도록 분발하세요! ❄️" >> $GITHUB_OUTPUT
           else
-            # 2. 이름별 개수 세고 정렬 (랭킹 로직)
-            # uniq -c: 개수 세기, sort -rn: 숫자 큰 순서대로 정렬
-            LIST=$(echo "$AUTHORS" | sort | uniq -c | sort -rn | awk '
+            echo "지난 일주일간의 명예의 전당입니다! 🏆" >> $GITHUB_OUTPUT
+            # 랭킹 계산 로직
+            echo "$AUTHORS" | sort | uniq -c | sort -rn | awk '
               BEGIN { rank=1 }
               {
                 emoji = (rank == 1 ? "🥇" : (rank == 2 ? "🥈" : (rank == 3 ? "🥉" : "•")))
                 print emoji " " rank "위: @" $2 " (" $1 " commits)"
                 rank++
               }
-            ')
-            echo "content=지난 일주일간의 명예의 전당입니다! 🏆%0A$LIST" >> $GITHUB_OUTPUT
+            ' >> $GITHUB_OUTPUT
           fi
-
-          echo "EOF" >> $GITHUB_OUTPUT
           
+          echo "EOF" >> $GITHUB_OUTPUT
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
