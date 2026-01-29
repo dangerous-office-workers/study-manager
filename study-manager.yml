@@ -1,0 +1,52 @@
+name: 🏆 Weekly Study Leaderboard
+
+on:
+  schedule:
+    - cron: '0 0 * * 1' # 매주 월요일 오전 9시
+  workflow_dispatch:
+
+jobs:
+  leaderboard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Last Week Date
+        id: date
+        run: echo "since=$(date -d '7 days ago' +%Y-%m-%d)" >> $GITHUB_OUTPUT
+
+      - name: Calculate Ranking
+        id: ranking
+        run: |
+          ORG_NAME="dangerous-office-workers" # 실제 조직 ID
+          SINCE_DATE="${{ steps.date.outputs.since }}"
+          
+          # 1. 커밋 데이터 가져오기 (작성자 ID만 추출)
+          QUERY="org:$ORG_NAME author-date:>=$SINCE_DATE merge:false"
+          AUTHORS=$(gh api "search/commits?q=$QUERY" --jq '.items[].author.login')
+
+          if [ -z "$AUTHORS" ]; then
+            echo "content=지난주에는 활동한 멤버가 없네요. 모두 분발하세요! ❄️" >> $GITHUB_OUTPUT
+          else
+            # 2. 이름별 개수 세고 정렬 (랭킹 로직)
+            # uniq -c: 개수 세기, sort -rn: 숫자 큰 순서대로 정렬
+            LIST=$(echo "$AUTHORS" | sort | uniq -c | sort -rn | awk '
+              BEGIN { rank=1 }
+              {
+                emoji = (rank == 1 ? "🥇" : (rank == 2 ? "🥈" : (rank == 3 ? "🥉" : "•")))
+                print emoji " " rank "위: @" $2 " (" $1 " commits)"
+                rank++
+              }
+            ')
+            echo "content=지난 일주일간의 명예의 전당입니다! 🏆%0A$LIST" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Send to Slack
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          payload: |
+            {
+              "text": "📢 *[위험한 직장인들] 이번 주 스터디 랭킹 정리*\n${{ steps.ranking.outputs.content }}\n\n_순위에 없으신 분들은 다음 주를 노려보세요! 🔥_"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
