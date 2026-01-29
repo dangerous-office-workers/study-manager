@@ -18,10 +18,14 @@ jobs:
         run: |
           ORG_NAME="dangerous-office-workers" # 실제 조직 ID
           SINCE_DATE="${{ steps.date.outputs.since }}"
+
+          echo "[INFO] $ORG_NAME 조직의 $SINCE_DATE 이후 기록을 찾습니다..."
           
           # 1. 커밋 데이터 가져오기 (작성자 ID만 추출)
           QUERY="org:$ORG_NAME author-date:>=$SINCE_DATE merge:false"
           AUTHORS=$(gh api "search/commits?q=$QUERY" --jq '.items[].author.login')
+
+          echo "content<<EOF" >> $GITHUB_OUTPUT
 
           if [ -z "$AUTHORS" ]; then
             echo "content=지난주에는 활동한 멤버가 없네요. 모두 분발하세요! ❄️" >> $GITHUB_OUTPUT
@@ -38,6 +42,9 @@ jobs:
             ')
             echo "content=지난 일주일간의 명예의 전당입니다! 🏆%0A$LIST" >> $GITHUB_OUTPUT
           fi
+
+          echo "EOF" >> $GITHUB_OUTPUT
+          
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
