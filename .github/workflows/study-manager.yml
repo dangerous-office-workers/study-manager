@@ -3,7 +3,7 @@ name: 🏆 Weekly Study Leaderboard
 on:
   schedule:
     - cron: '0 0 * * 1' # 매주 월요일 오전 9시 (KST)
-  workflow_dispatch:
+  workflow_dispatch: 
 
 jobs:
   leaderboard:
